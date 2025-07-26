@@ -13,8 +13,8 @@ Ultra-simplified Pi code that receives pre-rendered PNG frames from backend and 
 
 ### 1. Clone and Setup
 ```bash
-git clone <your-repo>
-cd epaper-frame-display
+git clone https://github.com/catapultcase/JunctionRelay_FrameEngine
+cd JunctionRelay_FrameEngine
 python3 -m venv venv
 source venv/bin/activate
 ```
