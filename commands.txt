@@ -5,4 +5,4 @@ ps aux | grep python | grep main.py
 sudo kill XXXX
 
 
-rm -rf ~/JunctionRelay_FrameEngine
+sudo rm -rf ~/JunctionRelay_FrameEngine
