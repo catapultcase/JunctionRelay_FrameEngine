@@ -1,33 +1,15 @@
 # E-Paper Frame Display - Simplified Pi Implementation
 
-Lightweight display daemon for Raspberry Pi that receives pre-rendered PNG frames and shows them on Waveshare e-paper displays.
+Ultra-simplified Pi code that receives pre-rendered PNG frames from backend and displays them on e-paper.
 
----
+## Features
+- ✅ Single HTTP endpoint for frame display
+- ✅ Automatic hardware detection (simulation mode if no e-paper)
+- ✅ Minimal dependencies 
+- ✅ Graceful error handling
+- ✅ Status monitoring endpoints
 
-## ✅ Features
-
-- 🖼️ Accepts full PNG frames via HTTP POST
-- 📐 Supports multiple display models:
-  - 5.79" (792x272) 4-color
-  - 7.3" (800x480) 6-color Spectra
-- 🖥️ Auto-select resolution based on model
-- 🎨 Handles color quantization for 6-color displays
-- 🧪 Simulation mode if no hardware is present
-- 🌐 REST endpoints for status and testing
-- ⚙️ Minimal dependencies, fast startup
-
----
-
-## 🖥️ Supported Displays
-
-| Model     | Argument     | Resolution | Colors                        |
-|-----------|--------------|------------|-------------------------------|
-| 5.79"     | `5in79g`     | 792×272    | Black, White, Red, Yellow     |
-| 7.3" (E)  | `7in3sce`    | 800×480    | Black, White, Red, Yellow, Green, Blue |
-
----
-
-## 🧑‍💻 Installation
+## Installation
 
 ### 1. Clone and Setup
 ```bash
@@ -42,90 +24,75 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Install Waveshare Library (on Pi)
+### 3. Install Waveshare Library (Pi only)
 ```bash
 git clone https://github.com/waveshare/e-Paper.git
-cp -r e-Paper/RaspberryPi_JetsonNano/python/lib/waveshare_epd ./waveshare_epd
+cp -r e-Paper/RaspberryPi_JetsonNano/python/lib/waveshare_epd ./
 ```
 
----
-
-## 🚀 Running
-
-### Run for 5.79" Display (default)
+### 4. Run
 ```bash
 sudo python3 main.py
 ```
 
-### Run for 7.3" Spectra Display
+## API Endpoints
+
+### Display Frame
 ```bash
-sudo python3 main.py --model 7in3sce
+POST /api/display/frame
+Content-Type: application/octet-stream
+Body: PNG image data (792x272)
 ```
 
----
+### Status Check
+```bash
+GET /api/status
+```
 
-## 🔌 API Endpoints
+### Display Info
+```bash
+GET /api/display/info
+```
 
-| Method | Path                  | Description                  |
-|--------|-----------------------|------------------------------|
-| POST   | `/api/display/frame`  | Send PNG frame               |
-| GET    | `/api/status`         | Get service and display info |
-| GET    | `/api/display/info`   | Static display metadata      |
-| GET    | `/api/test`           | Health check                 |
+### Test
+```bash
+GET /api/test
+```
 
----
-
-## 🧪 Test Frame Upload
+## Testing from Backend
 
 ```bash
-curl -X POST http://<pi-ip>/api/display/frame \
+# Test from your .NET backend
+curl -X POST http://pi-ip-address/api/display/frame \
   -H "Content-Type: application/octet-stream" \
   --data-binary @frame.png
 ```
 
----
+## Simulation Mode
 
-## 🧪 Simulation Mode
+If no e-paper hardware is detected, the service runs in simulation mode:
+- Frames are saved to `/tmp/epaper_frame_*.png`
+- All endpoints work normally
+- Perfect for development/testing
 
-If e-paper hardware is not detected:
-- Frames are saved to `/tmp/epaper_frame_TIMESTAMP.png`
-- All HTTP APIs continue working
-
-Great for local development without hardware.
-
----
-
-## 🧱 Architecture
+## Architecture
 
 ```
-Backend (.NET, etc)
-    ↓
-Render PNG Frame
-    ↓
-HTTP POST to Pi
-    ↓
-Pi Displays via SPI
+Backend (.NET) → Generate PNG Frame → HTTP POST → Pi → E-Paper Display
 ```
 
----
+**That's it!** No complex protocols, no rendering logic, just pure display functionality.
 
-## 📁 File Overview
+## Files
 
-| File               | Description                          |
-|--------------------|--------------------------------------|
-| `main.py`          | App entry point, handles CLI and startup |
-| `display_service.py` | Handles hardware control and image rendering |
-| `http_server.py`   | Flask-based HTTP API for receiving frames |
-| `requirements.txt` | Python dependencies                  |
+- `main.py` - Application entry point
+- `http_server.py` - Flask HTTP server with endpoints  
+- `display_service.py` - E-paper display operations
+- `requirements.txt` - Python dependencies
 
----
+## Previous vs New
 
-## 🛠️ Next Steps
+**Before:** 1000+ lines, complex protocol parsing, on-device rendering  
+**After:** ~200 lines, single HTTP endpoint, pure display
 
-- Add support for additional Waveshare models
-- Enable basic image caching
-- Add systemd service for auto-start
-
----
-
-Made with ❤️ for the JunctionRelay project.
+Much simpler, much more reliable! 🚀
