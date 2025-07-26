@@ -1,0 +1,8 @@
+# Find the process
+ps aux | grep python | grep main.py
+
+# Kill by PID (replace XXXX with actual PID from above)
+sudo kill XXXX
+
+
+rm -rf ~/JunctionRelay_FrameEngine
