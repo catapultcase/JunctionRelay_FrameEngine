@@ -1,21 +1,11 @@
 """
 Display Service - Handles e-paper display operations
-Supports multiple Waveshare models with color quantization
+Supports multiple Waveshare models with dynamic import
 """
 
 import time
 import io
 from PIL import Image
-import os
-
-EPAPER_AVAILABLE = False
-try:
-    from waveshare_epd import epd5in79g, epd7in3sce
-    EPAPER_AVAILABLE = True
-    print("[DISPLAY] Waveshare e-paper libraries imported successfully")
-except ImportError as e:
-    print(f"[DISPLAY] Warning: E-paper libraries not available: {e}")
-    print("[DISPLAY] Running in simulation mode")
 
 SPECTRA_COLORS = [
     (0, 0, 0),        # Black
@@ -45,27 +35,25 @@ class DisplayService:
         try:
             self.start_time = time.time()
 
-            if EPAPER_AVAILABLE:
-                if self.model == "5in79g":
-                    print("[DISPLAY] Initializing 5.79\" e-paper...")
-                    self.epd = epd5in79g.EPD()
-                elif self.model == "7in3sce":
-                    print("[DISPLAY] Initializing 7.3\" 6-color e-paper...")
-                    self.epd = epd7in3sce.EPD()
-                else:
-                    raise ValueError(f"Unsupported display model: {self.model}")
-
-                self.epd.init()
-                self.width, self.height = self.epd.width, self.epd.height
-                print(f"[DISPLAY] ✅ E-paper display initialized: {self.width}x{self.height}")
+            if self.model == "5in79g":
+                from waveshare_epd import epd5in79g
+                print("[DISPLAY] Initializing 5.79\" e-paper...")
+                self.epd = epd5in79g.EPD()
+            elif self.model == "7in3sce":
+                from waveshare_epd import epd7in3sce
+                print("[DISPLAY] Initializing 7.3\" 6-color e-paper...")
+                self.epd = epd7in3sce.EPD()
             else:
-                print("[DISPLAY] ⚠️ Running in simulation mode (no e-paper hardware)")
+                raise ValueError(f"Unsupported display model: {self.model}")
 
+            self.epd.init()
+            self.width, self.height = self.epd.width, self.epd.height
+            print(f"[DISPLAY] ✅ E-paper display initialized: {self.width}x{self.height}")
             self.initialized = True
             return True
 
         except Exception as e:
-            print(f"[DISPLAY] ❌ Failed to initialize display: {e}")
+            print(f"[DISPLAY] ❌ Falling back to simulation mode: {e}")
             return False
 
     def display_frame(self, frame_data):
@@ -82,7 +70,7 @@ class DisplayService:
             if self.model == "7in3sce":
                 image = quantize_to_spectra(image)
 
-            if EPAPER_AVAILABLE and self.epd:
+            if self.initialized and self.epd:
                 print(f"[DISPLAY] 📺 Displaying frame on e-paper ({len(frame_data)} bytes)")
                 self.epd.display(self.epd.getbuffer(image))
             else:
@@ -115,7 +103,7 @@ class DisplayService:
 
     def clear_display(self):
         try:
-            if EPAPER_AVAILABLE and self.epd:
+            if self.initialized and self.epd:
                 self.epd.Clear()
                 print("[DISPLAY] 🧹 Display cleared")
             else:
@@ -125,12 +113,10 @@ class DisplayService:
 
     def shutdown(self):
         try:
-            if EPAPER_AVAILABLE and self.epd:
+            if self.initialized and self.epd:
                 print("[DISPLAY] 💤 Putting e-paper display to sleep...")
                 self.epd.sleep()
-
             print("[DISPLAY] ✅ Display service shutdown complete")
-
         except Exception as e:
             print(f"[DISPLAY] ❌ Error during shutdown: {e}")
 
@@ -138,7 +124,6 @@ class DisplayService:
         uptime = time.time() - self.start_time if self.start_time else 0
         return {
             "initialized": self.initialized,
-            "hardware_available": EPAPER_AVAILABLE,
             "width": self.width,
             "height": self.height,
             "model": self.model,
