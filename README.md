@@ -48,13 +48,6 @@ Example prefix: 74820200
 - 00 = Routing field
 ```
 
-### Direct Frame Display (Legacy)
-```bash
-POST /api/display/frame
-Content-Type: application/octet-stream
-Body: Raw PNG image data (792x272)
-```
-
 ### Status Check
 ```bash
 GET /api/status
