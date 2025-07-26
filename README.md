@@ -1,13 +1,12 @@
-# E-Paper Frame Display - Simplified Pi Implementation
+# E-Paper Frame Display - Junction Relay Frame Mode
 
-Ultra-simplified Pi code that receives pre-rendered PNG frames from backend and displays them on e-paper.
+Simplified Pi implementation that receives pre-rendered PNG frames from Junction Relay backend and displays them on e-paper. Supports both direct frame display and Junction Relay protocol streaming.
 
 ## Features
-- ✅ Single HTTP endpoint for frame display
-- ✅ Automatic hardware detection (simulation mode if no e-paper)
-- ✅ Minimal dependencies 
-- ✅ Graceful error handling
-- ✅ Status monitoring endpoints
+- ✅ **Junction Relay Protocol**: Full support for prefixed frame data (LLLLTTRR format)
+- ✅ **Multiple Data Types**: Handles JSON (Type 00), Gzip (Type 01), and Frame (Type 02) payloads
+- ✅ **Automatic Hardware Detection**: Simulation mode if no e-paper hardware
+- ✅ **Status Monitoring**: Comprehensive endpoint monitoring
 
 ## Installation
 
@@ -37,11 +36,23 @@ sudo python3 main.py
 
 ## API Endpoints
 
-### Display Frame
+### Main Data Ingestion (Junction Relay Protocol)
+```bash
+POST /api/data
+Content-Type: application/octet-stream
+Body: Prefixed frame data (LLLLTTRR + PNG bytes)
+
+Example prefix: 74820200
+- 7482 = Frame size in bytes
+- 02 = Frame data type 
+- 00 = Routing field
+```
+
+### Direct Frame Display (Legacy)
 ```bash
 POST /api/display/frame
 Content-Type: application/octet-stream
-Body: PNG image data (792x272)
+Body: Raw PNG image data (792x272)
 ```
 
 ### Status Check
@@ -59,13 +70,46 @@ GET /api/display/info
 GET /api/test
 ```
 
-## Testing from Backend
+## Protocol Support
 
+### Junction Relay Stream Data Types
+The Pi now supports all Junction Relay protocol data types:
+
+- **Type 00**: JSON payloads (for compatibility)
+- **Type 01**: Gzip compressed JSON (for compatibility)  
+- **Type 02**: Frame data (PNG images for display)
+
+### LLLLTTRR Prefix Format
+```
+LLLLTTRR = 8-digit ASCII prefix
+├── LLLL = 4-digit length hint
+├── TT = 2-digit type field (00=JSON, 01=Gzip, 02=Frame)
+└── RR = 2-digit routing field
+```
+
+## Testing
+
+### From Junction Relay Backend (.NET)
 ```bash
-# Test from your .NET backend
+# Frame mode streaming works automatically when junction 
+# RenderingMode is set to "FrameEngine"
+```
+
+### Direct Frame Testing
+```bash
 curl -X POST http://pi-ip-address/api/display/frame \
   -H "Content-Type: application/octet-stream" \
   --data-binary @frame.png
+```
+
+### Protocol Testing
+```bash
+# Test with prefixed frame data
+echo -n "74820200" > /tmp/test_frame.bin
+cat frame.png >> /tmp/test_frame.bin
+curl -X POST http://pi-ip-address/api/data \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @/tmp/test_frame.bin
 ```
 
 ## Simulation Mode
@@ -73,26 +117,63 @@ curl -X POST http://pi-ip-address/api/display/frame \
 If no e-paper hardware is detected, the service runs in simulation mode:
 - Frames are saved to `/tmp/epaper_frame_*.png`
 - All endpoints work normally
-- Perfect for development/testing
+- Perfect for development/testing without hardware
 
 ## Architecture
 
+### Frame Mode Flow
 ```
-Backend (.NET) → Generate PNG Frame → HTTP POST → Pi → E-Paper Display
+Junction Relay Backend (.NET)
+    ↓ RenderingMode = "FrameEngine"
+FrameEngine Service
+    ↓ Renders PNG frame (SkiaSharp)
+Stream Manager (HTTP/COM)
+    ↓ Adds LLLLTTRR prefix + PNG bytes
+Pi HTTP Server (/api/data)
+    ↓ Parses prefix, extracts PNG
+E-Paper Display Service
+    ↓ Displays frame
+Waveshare E-Paper Hardware
 ```
 
-**That's it!** No complex protocols, no rendering logic, just pure display functionality.
+### Legacy Flow
+```
+Backend → Raw PNG → POST /api/display/frame → E-Paper Display
+```
 
 ## Files
 
-- `main.py` - Application entry point
-- `http_server.py` - Flask HTTP server with endpoints  
+- `main.py` - Application entry point with enhanced logging
+- `http_server.py` - Flask HTTP server with Junction Relay protocol support
 - `display_service.py` - E-paper display operations
 - `requirements.txt` - Python dependencies
 
-## Previous vs New
+## Frame Mode vs Payload Mode
 
-**Before:** 1000+ lines, complex protocol parsing, on-device rendering  
-**After:** ~200 lines, single HTTP endpoint, pure display
+| Mode | Backend Rendering | Pi Processing | Data Size | Latency |
+|------|------------------|---------------|-----------|---------|
+| **Frame Mode** | ✅ Full rendering | ❌ Display only | ~7KB PNG | Low |
+| **Payload Mode** | ❌ JSON only | ✅ Full rendering | ~1KB JSON | High |
 
-Much simpler, much more reliable! 🚀
+## Supported Configurations
+
+### Junction Types
+- ✅ **HTTP Junction** (direct device communication)
+- ✅ **Gateway Junction (HTTP to ESP:NOW)** (via gateway device)
+- ✅ **COM Junction** (serial communication)
+- ✅ **Gateway Junction (COM to ESP:NOW)** (via COM gateway)
+
+### Frame Layouts
+- ✅ **FRAME_SENSOR_GRID** - Tabular sensor display
+- ✅ **FRAME_DASHBOARD** - Widget-based layout
+- ✅ **FRAME_CALENDAR** - TV Guide style calendar
+- ✅ **FRAME_CHART** - Data visualization
+- ✅ **FRAME_QUAD** - Four-quadrant layout
+- ✅ **FRAME_IMAGE** - Image overlay display
+
+**Benefits of Frame Mode:**
+- 🚀 **Performance**: No Pi-side rendering overhead
+- 🎨 **Consistency**: Server-side rendering ensures identical output
+- 🔧 **Simplicity**: Pi becomes pure display device
+- 📊 **Rich Layouts**: Complex visualizations possible with SkiaSharp
+- 🌐 **Scalability**: Backend handles all rendering complexity
