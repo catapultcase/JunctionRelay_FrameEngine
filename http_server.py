@@ -1,8 +1,4 @@
-"""
-HTTP Server - Receives frame data and routes to display
-Updated to handle prefixed stream data from Junction Relay
-"""
-
+import threading
 from flask import Flask, request, jsonify
 import time
 import uuid
@@ -31,7 +27,7 @@ class FrameHTTPServer:
                 if not data:
                     return jsonify({"error": "No data received"}), 400
                 
-                # Process the stream data
+                # Process the stream data synchronously
                 success = self._process_stream_data(data)
                 
                 if success:
@@ -56,21 +52,28 @@ class FrameHTTPServer:
                 if len(frame_data) < 100:  # Basic sanity check
                     return jsonify({"error": "Frame data too small"}), 400
                     
-                # Display the frame directly
-                success = self.display.display_frame(frame_data)
+                # Dispatch actual rendering to a background thread
+                def _render():
+                    try:
+                        success = self.display.display_frame(frame_data)
+                        if success:
+                            self.frame_count += 1
+                            self.last_frame_time = time.time()
+                            print(f"[HTTP] ✅ Frame displayed: {len(frame_data)} bytes")
+                        else:
+                            print(f"[HTTP] ❌ Failed to display frame")
+                    except Exception as e:
+                        print(f"[HTTP] ERROR in rendering thread: {e}")
+
+                threading.Thread(target=_render, daemon=True).start()
                 
-                if success:
-                    self.frame_count += 1
-                    self.last_frame_time = time.time()
-                    
-                    return jsonify({
-                        "status": "success",
-                        "frame_size": len(frame_data),
-                        "frame_count": self.frame_count,
-                        "timestamp": self.last_frame_time
-                    }), 200
-                else:
-                    return jsonify({"error": "Failed to display frame"}), 500
+                # Immediately return success on data receipt
+                return jsonify({
+                    "status": "success",
+                    "frame_size": len(frame_data),
+                    "frame_count": self.frame_count,
+                    "timestamp": self.last_frame_time
+                }), 200
                     
             except Exception as e:
                 print(f"[HTTP] ERROR in /api/display/frame: {e}")
@@ -148,15 +151,15 @@ class FrameHTTPServer:
             
             # Parse LLLLTTRR prefix
             length_hint = int(prefix_str[0:4])
-            type_field = int(prefix_str[4:6])
-            route_field = int(prefix_str[6:8])
+            type_field   = int(prefix_str[4:6])
+            route_field  = int(prefix_str[6:8])
             
             print(f"[HTTP] Prefix: Length={length_hint}, Type={type_field:02d}, Route={route_field:02d}")
             
             # Extract payload after prefix
             payload = data[8:]
             
-            if type_field == 2:  # Frame data
+            if   type_field == 2:  # Frame data
                 print(f"[HTTP] Processing frame data: {len(payload)} bytes")
                 return self._handle_frame_data(payload)
             elif type_field == 0:  # JSON data
@@ -184,18 +187,22 @@ class FrameHTTPServer:
             # Check for PNG signature
             if frame_data[:8] != b'\x89PNG\r\n\x1a\n':
                 print("[HTTP] Warning: Frame data doesn't have PNG signature")
-                # Try to display anyway - might still work
             
-            success = self.display.display_frame(frame_data)
+            # Dispatch rendering to background
+            def _render():
+                try:
+                    success = self.display.display_frame(frame_data)
+                    if success:
+                        self.frame_count += 1
+                        self.last_frame_time = time.time()
+                        print(f"[HTTP] ✅ Frame displayed: {len(frame_data)} bytes")
+                    else:
+                        print(f"[HTTP] ❌ Failed to display frame")
+                except Exception as e:
+                    print(f"[HTTP] ERROR in rendering thread: {e}")
             
-            if success:
-                self.frame_count += 1
-                self.last_frame_time = time.time()
-                print(f"[HTTP] ✅ Frame displayed: {len(frame_data)} bytes")
-            else:
-                print(f"[HTTP] ❌ Failed to display frame")
-            
-            return success
+            threading.Thread(target=_render, daemon=True).start()
+            return True
             
         except Exception as e:
             print(f"[HTTP] Error handling frame data: {e}")
@@ -206,7 +213,6 @@ class FrameHTTPServer:
         try:
             json_str = json_data.decode('utf-8')
             print(f"[HTTP] Received JSON data: {json_str[:100]}...")
-            # For now, just acknowledge - could add JSON processing later
             return True
         except Exception as e:
             print(f"[HTTP] Error handling JSON data: {e}")
@@ -217,9 +223,8 @@ class FrameHTTPServer:
         try:
             import gzip
             decompressed = gzip.decompress(gzip_data)
-            json_str = decompressed.decode('utf-8')
+            json_str     = decompressed.decode('utf-8')
             print(f"[HTTP] Received Gzip JSON data: {json_str[:100]}...")
-            # For now, just acknowledge - could add JSON processing later
             return True
         except Exception as e:
             print(f"[HTTP] Error handling Gzip data: {e}")
@@ -231,11 +236,21 @@ class FrameHTTPServer:
             # Check for PNG signature
             if png_data[:8] == b'\x89PNG\r\n\x1a\n':
                 print(f"[HTTP] Processing raw PNG: {len(png_data)} bytes")
-                success = self.display.display_frame(png_data)
-                if success:
-                    self.frame_count += 1
-                    self.last_frame_time = time.time()
-                return success
+
+                def _render():
+                    try:
+                        success = self.display.display_frame(png_data)
+                        if success:
+                            self.frame_count += 1
+                            self.last_frame_time = time.time()
+                            print(f"[HTTP] ✅ Raw PNG displayed: {len(png_data)} bytes")
+                        else:
+                            print(f"[HTTP] ❌ Failed to display raw PNG")
+                    except Exception as e:
+                        print(f"[HTTP] ERROR in rendering thread: {e}")
+
+                threading.Thread(target=_render, daemon=True).start()
+                return True
             else:
                 print("[HTTP] Data is not valid PNG")
                 return False
