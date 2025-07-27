@@ -19,10 +19,22 @@ DISPLAY_MODELS = {
         "description": "5.79\" 4-color E-Paper HAT (G)"
     },
     "7.3e": {
-        "module": "waveshare_epd.epd7in3e", 
+        "module": "waveshare_epd.epd7in3e",
         "width": 800,
         "height": 480,
         "description": "7.3\" E-Paper HAT (E)"
+    },
+    "7.3f": {
+        "module": "waveshare_epd.epd7in3f", 
+        "width": 800,
+        "height": 480,
+        "description": "7.3\" E-Paper HAT (F)"
+    },
+    "7.3g": {
+        "module": "waveshare_epd.epd7in3g",
+        "width": 800,
+        "height": 480, 
+        "description": "7.3\" E-Paper HAT (G)"
     },
     "4.0e": {
         "module": "waveshare_epd.epd4in01e",
@@ -71,8 +83,28 @@ class DisplayService:
             
             if self.hardware_available:
                 print(f"[DISPLAY] Initializing {self.description}...")
+                print(f"[DISPLAY] Step 1: Creating EPD object...")
                 self.epd = self.epd_module.EPD()
-                self.epd.init()
+                print(f"[DISPLAY] Step 2: Starting hardware initialization...")
+                
+                # Add timeout for hardware initialization
+                import signal
+                def timeout_handler(signum, frame):
+                    raise TimeoutError(f'{self.description} initialization timed out after 30 seconds')
+                
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(30)  # 30 second timeout
+                
+                try:
+                    self.epd.init()
+                    signal.alarm(0)  # Cancel timeout
+                    print(f"[DISPLAY] Step 3: Hardware initialization successful")
+                except TimeoutError as e:
+                    signal.alarm(0)
+                    print(f"[DISPLAY] ❌ {e}")
+                    print(f"[DISPLAY] This usually indicates hardware connection issues")
+                    print(f"[DISPLAY] Check ribbon cable and GPIO connections")
+                    return False
                 
                 # Some displays may have different width/height properties
                 if hasattr(self.epd, 'width') and hasattr(self.epd, 'height'):
@@ -87,6 +119,11 @@ class DisplayService:
             
         except Exception as e:
             print(f"[DISPLAY] ❌ Failed to initialize display: {e}")
+            print(f"[DISPLAY] Hardware troubleshooting:")
+            print(f"[DISPLAY] 1. Check ribbon cable connection")
+            print(f"[DISPLAY] 2. Verify HAT is properly seated on GPIO pins")
+            print(f"[DISPLAY] 3. Ensure SPI is enabled: ls /dev/spi*")
+            print(f"[DISPLAY] 4. Try different display module variant")
             return False
             
     def display_frame(self, frame_data):
