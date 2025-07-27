@@ -7,12 +7,13 @@ Receives pre-rendered frames from backend and displays them
 import sys
 import signal
 import threading
+import argparse
 from http_server import FrameHTTPServer
 from display_service import DisplayService
 
 class FrameDisplayApp:
-    def __init__(self):
-        self.display = DisplayService()
+    def __init__(self, display_model="5.79g"):
+        self.display = DisplayService(display_model)
         self.http_server = None
         self.running = False
         
@@ -22,10 +23,17 @@ class FrameDisplayApp:
         
     def start(self):
         """Start the frame display service"""
-        print("=" * 50)
+        print("=" * 60)
         print("E-Paper Frame Display v2.0")
         print("Simplified Pi Implementation")
-        print("=" * 50)
+        print("=" * 60)
+        
+        # Show display model info
+        stats = self.display.get_display_stats()
+        print(f"📱 Display Model: {stats['model']} - {stats['description']}")
+        print(f"📏 Resolution: {stats['width']}x{stats['height']}")
+        print(f"🔧 Hardware: {'Available' if stats['hardware_available'] else 'Simulation Mode'}")
+        print("")
         
         # Initialize display
         if not self.display.initialize():
@@ -83,8 +91,63 @@ class FrameDisplayApp:
             
         print("✅ Shutdown complete")
 
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description='E-Paper Frame Display Service',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Supported Display Models:
+  5.79g    5.79" 4-color E-Paper HAT (G) - 792x272 (default)
+  7.3e     7.3" E-Paper HAT (E) - 800x480  
+  4.0e     4" E-Paper HAT Plus (E) - 640x400
+
+Examples:
+  python3 main.py                    # Use default 5.79g display
+  python3 main.py --model 7.3e       # Use 7.3" E-Paper HAT
+  python3 main.py -m 4.0e            # Use 4" E-Paper HAT Plus
+  python3 main.py --list-models      # Show supported models
+        '''
+    )
+    
+    parser.add_argument(
+        '-m', '--model',
+        default='5.79g',
+        help='E-paper display model (default: 5.79g)'
+    )
+    
+    parser.add_argument(
+        '--list-models',
+        action='store_true',
+        help='List supported display models and exit'
+    )
+    
+    return parser.parse_args()
+
 def main():
-    app = FrameDisplayApp()
+    args = parse_arguments()
+    
+    # Handle --list-models
+    if args.list_models:
+        print("Supported E-Paper Display Models:")
+        print("=" * 40)
+        supported = DisplayService.get_supported_models()
+        for model, description in supported.items():
+            print(f"  {model:<8} {description}")
+        print("")
+        print("Usage: python3 main.py --model <model>")
+        return 0
+    
+    # Validate model
+    supported_models = DisplayService.get_supported_models()
+    if args.model not in supported_models:
+        print(f"Error: Unknown display model '{args.model}'")
+        print(f"Supported models: {', '.join(supported_models.keys())}")
+        print("Use --list-models to see full descriptions")
+        return 1
+    
+    # Start the application
+    app = FrameDisplayApp(args.model)
     success = app.start()
     return 0 if success else 1
 
