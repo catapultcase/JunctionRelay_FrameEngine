@@ -83,6 +83,7 @@ class FrameHTTPServer:
         def get_status():
             """Service status endpoint"""
             uptime = time.time() - self.display.start_time if self.display.start_time else 0
+            display_stats = self.display.get_display_stats()
             
             return jsonify({
                 "status": "running",
@@ -91,16 +92,23 @@ class FrameHTTPServer:
                 "frames_displayed": self.frame_count,
                 "last_frame": self.last_frame_time,
                 "display_initialized": self.display.initialized,
+                "display_model": display_stats["model"],
+                "display_description": display_stats["description"],
+                "hardware_available": display_stats["hardware_available"],
                 "mac_address": self._get_mac_address()
             })
             
         @self.app.route('/api/display/info', methods=['GET'])
         def get_display_info():
             """Display capabilities endpoint"""
+            display_stats = self.display.get_display_stats()
+            
             return jsonify({
                 "display_type": "epaper_frame_display",
-                "width": 792,
-                "height": 272,
+                "model": display_stats["model"],
+                "description": display_stats["description"],
+                "width": display_stats["width"],
+                "height": display_stats["height"],
                 "colors": ["black", "white", "red", "yellow"],
                 "capabilities": [
                     "frame_display",
@@ -108,17 +116,30 @@ class FrameHTTPServer:
                     "color_epaper",
                     "stream_protocol"
                 ],
+                "hardware_available": display_stats["hardware_available"],
                 "version": "2.0",
                 "mac_address": self._get_mac_address()
+            })
+            
+        @self.app.route('/api/display/models', methods=['GET'])
+        def get_supported_models():
+            """Get supported display models"""
+            from display_service import DisplayService
+            return jsonify({
+                "supported_models": DisplayService.get_supported_models(),
+                "current_model": self.display.model
             })
             
         @self.app.route('/api/test', methods=['GET'])
         def test_endpoint():
             """Simple test endpoint"""
+            display_stats = self.display.get_display_stats()
             return jsonify({
                 "message": "Frame display service is running",
                 "timestamp": time.time(),
-                "service": "epaper_frame_display"
+                "service": "epaper_frame_display",
+                "model": display_stats["model"],
+                "resolution": f"{display_stats['width']}x{display_stats['height']}"
             })
             
         @self.app.errorhandler(404)

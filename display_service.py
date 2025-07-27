@@ -1,5 +1,5 @@
 """
-Display Service - Handles e-paper display operations
+Display Service - Handles e-paper display operations with multi-model support
 Simplified to just display pre-rendered PNG frames
 """
 
@@ -8,38 +8,79 @@ import io
 from PIL import Image
 import tempfile
 import os
+import importlib
 
-# Try to import the Waveshare e-paper library
-try:
-    import waveshare_epd.epd5in79g as epd5in79g
-    EPAPER_AVAILABLE = True
-    print("[DISPLAY] Waveshare e-paper library imported successfully")
-except ImportError as e:
-    EPAPER_AVAILABLE = False
-    print(f"[DISPLAY] Warning: Waveshare e-paper library not available: {e}")
-    print("[DISPLAY] Running in simulation mode")
+# Display model configurations
+DISPLAY_MODELS = {
+    "5.79g": {
+        "module": "waveshare_epd.epd5in79g",
+        "width": 792,
+        "height": 272,
+        "description": "5.79\" 4-color E-Paper HAT (G)"
+    },
+    "7.3e": {
+        "module": "waveshare_epd.epd7in3e", 
+        "width": 800,
+        "height": 480,
+        "description": "7.3\" E-Paper HAT (E)"
+    },
+    "4.0e": {
+        "module": "waveshare_epd.epd4in01e",
+        "width": 640, 
+        "height": 400,
+        "description": "4\" E-Paper HAT Plus (E)"
+    }
+}
 
 class DisplayService:
-    def __init__(self):
+    def __init__(self, model="5.79g"):
+        self.model = model
         self.epd = None
+        self.epd_module = None
         self.width = 792
         self.height = 272
         self.initialized = False
         self.start_time = None
+        self.hardware_available = False
+        
+        # Set display specs based on model
+        if model in DISPLAY_MODELS:
+            self.width = DISPLAY_MODELS[model]["width"]
+            self.height = DISPLAY_MODELS[model]["height"]
+            self.description = DISPLAY_MODELS[model]["description"]
+        else:
+            print(f"[DISPLAY] Warning: Unknown model '{model}', using default 5.79g")
+            self.model = "5.79g"
+            self.description = DISPLAY_MODELS["5.79g"]["description"]
+        
+        # Try to import the appropriate e-paper library
+        try:
+            module_name = DISPLAY_MODELS[self.model]["module"]
+            self.epd_module = importlib.import_module(module_name)
+            self.hardware_available = True
+            print(f"[DISPLAY] {self.description} library imported successfully")
+        except ImportError as e:
+            self.hardware_available = False
+            print(f"[DISPLAY] Warning: {self.description} library not available: {e}")
+            print("[DISPLAY] Running in simulation mode")
         
     def initialize(self):
         """Initialize the e-paper display"""
         try:
             self.start_time = time.time()
             
-            if EPAPER_AVAILABLE:
-                print("[DISPLAY] Initializing Waveshare 5.79\" e-paper display...")
-                self.epd = epd5in79g.EPD()
+            if self.hardware_available:
+                print(f"[DISPLAY] Initializing {self.description}...")
+                self.epd = self.epd_module.EPD()
                 self.epd.init()
-                self.width, self.height = self.epd.width, self.epd.height
+                
+                # Some displays may have different width/height properties
+                if hasattr(self.epd, 'width') and hasattr(self.epd, 'height'):
+                    self.width, self.height = self.epd.width, self.epd.height
+                    
                 print(f"[DISPLAY] ✅ E-paper display initialized: {self.width}x{self.height}")
             else:
-                print("[DISPLAY] ⚠️ Running in simulation mode (no e-paper hardware)")
+                print(f"[DISPLAY] ⚠️ Running in simulation mode (no {self.description} hardware)")
                 
             self.initialized = True
             return True
@@ -63,14 +104,14 @@ class DisplayService:
             if image.mode != 'RGB':
                 image = image.convert('RGB')
             
-            if EPAPER_AVAILABLE and self.epd:
+            if self.hardware_available and self.epd:
                 # Send to real e-paper display
-                print(f"[DISPLAY] 📺 Displaying frame on e-paper ({len(frame_data)} bytes)")
+                print(f"[DISPLAY] 📺 Displaying frame on {self.description} ({len(frame_data)} bytes)")
                 self.epd.display(self.epd.getbuffer(image))
             else:
                 # Simulation mode - save to file for testing
                 timestamp = int(time.time())
-                filename = f"/tmp/epaper_frame_{timestamp}.png"
+                filename = f"/tmp/epaper_frame_{self.model}_{timestamp}.png"
                 image.save(filename)
                 print(f"[DISPLAY] 💾 Simulation: Frame saved to {filename}")
             
@@ -104,19 +145,19 @@ class DisplayService:
     def clear_display(self):
         """Clear the display to white"""
         try:
-            if EPAPER_AVAILABLE and self.epd:
+            if self.hardware_available and self.epd:
                 self.epd.Clear()
-                print("[DISPLAY] 🧹 Display cleared")
+                print(f"[DISPLAY] 🧹 {self.description} cleared")
             else:
-                print("[DISPLAY] 🧹 Simulation: Display would be cleared")
+                print(f"[DISPLAY] 🧹 Simulation: {self.description} would be cleared")
         except Exception as e:
             print(f"[DISPLAY] ❌ Error clearing display: {e}")
             
     def shutdown(self):
         """Shutdown the display service"""
         try:
-            if EPAPER_AVAILABLE and self.epd:
-                print("[DISPLAY] 💤 Putting e-paper display to sleep...")
+            if self.hardware_available and self.epd:
+                print(f"[DISPLAY] 💤 Putting {self.description} to sleep...")
                 self.epd.sleep()
                 
             print("[DISPLAY] ✅ Display service shutdown complete")
@@ -130,8 +171,15 @@ class DisplayService:
         
         return {
             "initialized": self.initialized,
-            "hardware_available": EPAPER_AVAILABLE,
+            "hardware_available": self.hardware_available,
+            "model": self.model,
+            "description": self.description,
             "width": self.width,
             "height": self.height,
             "uptime_seconds": int(uptime)
         }
+        
+    @staticmethod
+    def get_supported_models():
+        """Get list of supported display models"""
+        return {model: config["description"] for model, config in DISPLAY_MODELS.items()}
